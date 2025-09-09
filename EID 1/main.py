@@ -1,43 +1,16 @@
 import sys
-from analisis_funciones import calcular_dominio, calcular_intersecciones, evaluar_punto
-from visualizacion_graficos import generar_grafico
+import tkinter as tk
+from analisis_funciones import AnalizadorFunciones
+from interfaz_usuario import AnalizadorFuncionesGUI
 
 def main():
-    print("--- Analizador de Funciones ---")
+    backend = AnalizadorFunciones()
     
-    # campo para ingresar la funcion
-    funcion_str = input("Ingrese una funcion (ej. 2*x**2 + 2*x): ")
-    if not funcion_str:
-        print("Debe ingresar una funcion. Saliendo...")
-        sys.exit()
-
-    # campo opcional para ingresar un valor a evaluar
-    valor_x_str = input("Ingrese un valor para evaluar (opcional): ")
-
-    try:
-        # calcular y mostrar el dominio y las intersecciones
-        dominio = calcular_dominio(funcion_str)
-        y_int, x_int = calcular_intersecciones(funcion_str)
-        
-        print("\n--- Resultados del Analisis Matemático ---")
-        print(f"Dominio: {dominio}")
-        print(f"Intersección con el Eje Y: {y_int}")
-        print(f"Intersección con el Eje X: {x_int}")
-
-        punto_resultante = None
-        # evaluar el punto si se ingreso un valor
-        if valor_x_str:
-            paso_a_paso, punto = evaluar_punto(funcion_str, valor_x_str)
-            print("\n--- Evaluacion del Punto ---")
-            print(paso_a_paso)
-            if punto:
-                punto_resultante = punto
-        
-        # funcion importada para generar el grafico
-        generar_grafico(funcion_str, punto_evaluado=punto_resultante)
-
-    except Exception as e:
-        print(f"Ha ocurrido un error inesperado: {e}")
+    # Crea la ventana principal de Tkinter
+    app = AnalizadorFuncionesGUI(backend)
+    
+    # Inicia el bucle de la aplicacion
+    app.mainloop()
 
 if __name__ == "__main__":
     main()
