@@ -1,72 +1,72 @@
 import sympy as sp
-from sympy.calculus.util import continuous_domain, function_range, Reals
 
-def calcular_dominio(funcion_str):
-    """
-    Calcula el dominio de una funcion dada
-    """
-    x = sp.Symbol('x')
-    try:
-        funcion = sp.sympify(funcion_str)
-        # Usa la funcion continuous_domain de sympy para encontrar el dominio
-        dominio_simbolico = continuous_domain(funcion, x, Reals)
-        dominio_str = str(dominio_simbolico).replace('Reals', 'Todos los numeros reales')
-        return dominio_str
-    except Exception as e:
-        return f"Error al calcular el dominio: {e}"
+class AnalizadorFunciones:
+    def __init__(self):
+        pass
 
-def calcular_recorrido(funcion_str):
-    """
-    Calcula el recorrido (rango) de una funcion dada
-    """
-    x = sp.Symbol('x')
-    try:
-        funcion = sp.sympify(funcion_str)
-        # Usa la funcion function_range de sympy para encontrar el recorrido
-        recorrido_simbolico = function_range(funcion, x, Reals)
-        recorrido_str = str(recorrido_simbolico).replace('Reals', 'Todos los numeros reales')
-        return recorrido_str
-    except Exception as e:
-        return f"Error al calcular el recorrido: {e}"
+    def evaluar_funcion(self, funcion_str, x_val):
+        # Manejo de errores para la expresion
+        try:
+            x = sp.Symbol('x')
+            f_x = sp.sympify(funcion_str)
+            
+            # Chequeando que el valor sea valido para la funcion
+            if f_x.subs(x, x_val).is_complex:
+                return "Error: el valor de x genera un numero complejo", None
+            
+            resultado = f_x.subs(x, x_val)
+            pasos = self.obtener_pasos_evaluacion(funcion_str, x_val, resultado)
+            
+            return resultado, pasos
+        except sp.SympifyError:
+            return "Error: funcion no valida", None
+        except ZeroDivisionError:
+            return "Error: division por cero en ese punto", None
+        except Exception as e:
+            return f"Error inesperado: {e}", None
 
-def calcular_intersecciones(funcion_str):
-    """
-    Calcula las intersecciones con los ejes x e y
-    """
-    x = sp.Symbol('x')
-    try:
-        funcion = sp.sympify(funcion_str)
-        # Para el eje y, se reemplaza x = 0 y se calcula el valor
-        y_int = funcion.subs(x, 0)
-        y_int_str = f"(0, {y_int})"
+    def obtener_pasos_evaluacion(self, funcion_str, x_val, resultado):
+        # Esto es un ejemplo, se puede mejorar
+        pasos = [
+            f"Funcion original: f(x) = {funcion_str}",
+            f"Sustituyendo x por {x_val}: f({x_val}) = {funcion_str.replace('x', str(x_val))}",
+            f"Calculando: f({x_val}) = {resultado}"
+        ]
+        return pasos
+    
+    def calcular_dominio(self, funcion_str):
+        # Placeholder para el calculo del dominio
+        # La logica real seria mas compleja para funciones racionales o con raices
+        x = sp.Symbol('x')
+        f_x = sp.sympify(funcion_str)
 
-        # Para el eje x, se resuelve la ecuacion f(x) = 0
-        x_intersecciones = sp.solve(funcion, x)
-        x_int_str = f"({', '.join(map(str, x_intersecciones))}, 0)"
-
-        return y_int_str, x_int_str
-    except Exception as e:
-        return f"Error al calcular intersecciones: {e}", ""
-
-def evaluar_punto(funcion_str, valor_x_str):
-    """
-    Evalua un punto en la funcion y muestra el paso a paso
-    """
-    x = sp.Symbol('x')
-    try:
-        # Convierte la cadena en una expresion de sympy
-        funcion = sp.sympify(funcion_str)
-        valor_x = sp.sympify(valor_x_str)
+        dominio = "Todos los numeros reales" # Caso por defecto
         
-        # Muestra el paso a paso del resultado
-        paso_a_paso = f"Evaluando f({valor_x}) = {funcion.subs(x, valor_x)}\n"
-        paso_a_paso += "------------------------\n"
-        paso_a_paso += f"Sustituyendo el valor en la función: {funcion_str}\n"
-        paso_a_paso += f"Paso 1: f({valor_x}) = {funcion.subs(x, valor_x)}\n"
+        # Ejemplo para funcion racional
+        if '/' in funcion_str:
+            numerador, denominador = funcion_str.split('/')
+            denominador_expr = sp.sympify(denominador)
+            restricciones = sp.solve(denominador_expr, x)
+            if restricciones:
+                dominio = f"Dominio: x pertenece a R, excepto cuando x es {restricciones}"
         
-        # Evalua el numero
-        punto_y = funcion.subs(x, valor_x).evalf()
+        return dominio
+
+    def calcular_recorrido(self, funcion_str):
+        # Este calculo es mas complejo y a menudo requiere analisis mas profundo
+        # Aqui solo un placeholder simple
+        recorrido = "No implementado aun, es mas complejo"
+        return recorrido
+
+    def calcular_intersecciones(self, funcion_str):
+        # Placeholder para las intersecciones
+        x = sp.Symbol('x')
+        f_x = sp.sympify(funcion_str)
         
-        return paso_a_paso, (valor_x, punto_y)
-    except Exception as e:
-        return f"Ocurrió un error al evaluar el punto: {e}", None
+        # Interseccion con el eje y (x=0)
+        y_int = f_x.subs(x, 0)
+        
+        # Interseccion con el eje x (f(x)=0)
+        x_int = sp.solve(f_x, x)
+        
+        return f"Interseccion Y: ({0}, {y_int})", f"Intersecciones X: {x_int}"
