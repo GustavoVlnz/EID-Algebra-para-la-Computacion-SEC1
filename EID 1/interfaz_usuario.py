@@ -1,147 +1,425 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import messagebox
+from analisis_funciones import AnalizadorFunciones
+from visualizacion_graficos import graficar_funcion
 
-# simulando importaciones de los otros archivos
-# en tu proyecto final estas lineas deben ser las reales
-def calcular_dominio(func):
-    return "Simulando calculo de dominio..."
-
-def calcular_intersecciones(func):
-    return ("(0, y_int)", "(x_int, 0)")
-
-def evaluar_punto(func, val):
-    return f"Simulando paso a paso para x={val}", (val, 1)
-
-def generar_grafico(func, punto=None):
-    messagebox.showinfo("Grafico", "Se generaria un grafico aqui...")
-
-class FunctionAnalyzerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Analizador de Funciones")
-        self.root.geometry("1000x650")
+class AnalizadorFuncionesGUI(tk.Tk):
+    def __init__(self, backend):
+        super().__init__()
         
-        # estilo para que se vea mas claro y minimalista
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
-        self.style.configure('TFrame', background='#F0F0F0')  # fondo claro
-        self.style.configure('TLabelFrame', background='#FFFFFF', foreground='#333333', font=('Arial', 12, 'bold')) # contenedor blanco con texto oscuro
-        self.style.configure('TLabel', background='#FFFFFF', foreground='#333333', font=('Arial', 11))
-        self.style.configure('TEntry', font=('Arial', 11), fieldbackground='#FFFFFF', foreground='#333333') # campos de entrada claros
-        
-        # colores para los botones
-        self.style.configure('TButton', font=('Arial', 11, 'bold'), padding=8, background='#007BFF', foreground='white') # azul brillante
-        self.style.map('TButton', background=[('active', '#0056b3'), ('!disabled', '#007BFF')])
+        self.backend = backend
+        self.title("Analizador de Funciones")
+        self.geometry("800x600")
+        self.config(bg="#E6E6E6") 
+
+        self.resizable(False, False)
 
         self.setup_ui()
 
+        # --- Centrar la ventana ---
+        window_width = 800
+        window_height = 600
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        position_top = int(screen_height / 2 - window_height / 2)
+        position_right = int(screen_width / 2 - window_width / 2)
+        self.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
+        
+        self.config(bg="#E6E6E6")
+        
     def setup_ui(self):
-        # frame principal para el diseno de la interfaz
-        main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # el titulo del programa
-        title_label = ttk.Label(main_frame, text="Analizador de Funciones", font=("Arial", 24, "bold"), background='#F0F0F0', foreground='#007BFF') # azul para el titulo
-        title_label.pack(pady=10)
-
-        # seccion de entrada de la funcion
-        input_frame = ttk.LabelFrame(main_frame, text="Entrada de la Funcion", padding="15")
-        input_frame.pack(fill=tk.X, pady=15)
-
-        func_label = ttk.Label(input_frame, text="Funcion f(x):")
-        func_label.pack(side=tk.LEFT, padx=5, pady=5)
-        self.function_entry = ttk.Entry(input_frame, width=40)
-        self.function_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, pady=5)
-
-        eval_label = ttk.Label(input_frame, text="Valor para evaluar x:")
-        eval_label.pack(side=tk.LEFT, padx=5, pady=5)
-        self.eval_entry = ttk.Entry(input_frame, width=15)
-        self.eval_entry.pack(side=tk.LEFT, padx=5, pady=5)
+        # Frame principal para centrar el contenido y aplicar margenes
+        main_frame = tk.Frame(self, bg="#E6E6E6", padx=50, pady=50)
+        main_frame.pack(expand=True, fill="both")
         
-        # botones para analizar, limpiar y ayuda
-        button_frame = ttk.Frame(main_frame, style='TFrame')
-        button_frame.pack(pady=15)
-
-        analyze_button = ttk.Button(button_frame, text="Analizar y Graficar", command=self.analyze_and_plot)
-        analyze_button.pack(side=tk.LEFT, padx=15)
+        # Etiqueta e input para la funcion
+        label_funcion = tk.Label(main_frame, text="Ingresa la funcion f(x):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
+        label_funcion.pack(pady=(0, 5))
         
-        clear_button = ttk.Button(button_frame, text="Limpiar", command=self.clear_fields)
-        clear_button.pack(side=tk.LEFT, padx=15)
+        self.input_funcion = tk.Entry(main_frame, width=40, font=("Arial", 12))
+        self.input_funcion.pack()
+        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5") 
         
-        help_button = ttk.Button(button_frame, text="Ayuda", command=self.show_help)
-        help_button.pack(side=tk.LEFT, padx=15)
+        # Estilo para el texto placeholder
+        self.input_funcion.config(foreground="#A0A0A0")
 
-        # seccion para los resultados
-        results_frame = ttk.LabelFrame(main_frame, text="Resultados", padding="15")
-        results_frame.pack(fill=tk.BOTH, expand=True, pady=15)
-
-        self.results_text = scrolledtext.ScrolledText(results_frame, wrap=tk.WORD, state='disabled', font=('Arial', 10), padx=5, pady=5, background='#FFFFFF', foreground='#333333', insertbackground='black')
-        self.results_text.pack(fill=tk.BOTH, expand=True)
+        # Espacio entre inputs
+        spacer1 = tk.Frame(main_frame, height=30, bg="#E6E6E6") 
+        spacer1.pack()
         
-    def analyze_and_plot(self):
-        self.results_text.config(state='normal')
-        self.results_text.delete(1.0, tk.END)
+        # Etiqueta e input para el valor a evaluar
+        label_evaluar = tk.Label(main_frame, text="Ingresa un valor para evaluar (opcional):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
+        label_evaluar.pack(pady=(0, 5))
         
-        function_str = self.function_entry.get()
-        eval_str = self.eval_entry.get()
+        self.input_evaluar = tk.Entry(main_frame, width=40, font=("Arial", 12))
+        self.input_evaluar.pack()
+        self.input_evaluar.insert(0, "ej: 2 o 0.5")
+        
+        # Estilo para el texto placeholder
+        self.input_evaluar.config(foreground="#A0A0A0")
+        
+        # Frame para los botones
+        button_frame = tk.Frame(main_frame, bg="#E6E6E6")
+        button_frame.pack(pady=20)
+        
+        # Colores de los botones
+        self.color_analizar = '#4CAF50'
+        self.color_analizar_hover = '#367c39'
+        self.color_limpiar = '#F44336'
+        self.color_limpiar_hover = '#c82333'
+        self.color_ayuda = '#2196F3'
+        self.color_ayuda_hover = '#1976D2'
 
-        if not function_str:
-            self.results_text.insert(tk.END, "Error: Por favor, ingrese una funcion\n")
-            self.results_text.config(state='disabled')
+        # Botones de accion
+        self.boton_limpiar = tk.Button(button_frame, text="Limpiar", command=self.limpiar_campos, 
+                                     bg=self.color_limpiar, fg='white', font=("Arial", 12, "bold"), 
+                                     relief='flat', padx=15, pady=8, bd=0)
+        self.boton_limpiar.pack(side="left", padx=5)
+        self.boton_limpiar.bind("<Enter>", lambda e: self.on_enter(e, self.color_limpiar_hover))
+        self.boton_limpiar.bind("<Leave>", lambda e: self.on_leave(e, self.color_limpiar))
+
+        self.boton_analizar = tk.Button(button_frame, text="Analizar y Graficar", command=self.analizar_y_graficar, 
+                                      bg=self.color_analizar, fg='white', font=("Arial", 12, "bold"), 
+                                      relief='flat', padx=15, pady=8, bd=0)
+        self.boton_analizar.pack(side="left", padx=5)
+        self.boton_analizar.bind("<Enter>", lambda e: self.on_enter(e, self.color_analizar_hover))
+        self.boton_analizar.bind("<Leave>", lambda e: self.on_leave(e, self.color_analizar))
+
+        self.boton_ayuda = tk.Button(button_frame, text="Ayuda", command=self.mostrar_ayuda, 
+                                    bg=self.color_ayuda, fg='white', font=("Arial", 12, "bold"), 
+                                    relief='flat', padx=15, pady=8, bd=0)
+        self.boton_ayuda.pack(side="left", padx=5)
+        self.boton_ayuda.bind("<Enter>", lambda e: self.on_enter(e, self.color_ayuda_hover))
+        self.boton_ayuda.bind("<Leave>", lambda e: self.on_leave(e, self.color_ayuda))
+
+        # Area de resultados
+        self.output_area = tk.Text(main_frame, height=10, width=60, font=("Arial", 12), bg='#F8F8F8', bd=1, relief="flat")
+        self.output_area.pack(pady=(10, 0), expand=True, fill="both")
+        
+        # Vincular eventos para el texto placeholder
+        self.input_funcion.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
+        self.input_funcion.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
+        self.input_evaluar.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_evaluar, "ej: 2 o 0.5"))
+        self.input_evaluar.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_evaluar, "ej: 2 o 0.5"))
+
+    def on_enter(self, event, color):
+        event.widget.config(bg=color)
+
+    def on_leave(self, event, color):
+        event.widget.config(bg=color)
+
+    def on_focus_in(self, entry, placeholder):
+        if entry.get() == placeholder:
+            entry.delete(0, tk.END)
+            entry.config(foreground='#333333')
+
+    def on_focus_out(self, entry, placeholder):
+        if entry.get() == "":
+            entry.insert(0, placeholder)
+            entry.config(foreground='#A0A0A0')
+            
+    def analizar_y_graficar(self):
+        funcion_str = self.input_funcion.get()
+        valor_evaluar_str = self.input_evaluar.get()
+        
+        if funcion_str == "ej: 2*x**2 + 3*x - 5":
+            funcion_str = ""
+        if valor_evaluar_str == "ej: 2 o 0.5":
+            valor_evaluar_str = ""
+            
+        if not funcion_str:
+            messagebox.showwarning("Error de entrada", "No ingresaste ninguna funcion")
             return
 
-        try:
-            dominio = calcular_dominio(function_str)
-            y_int, x_int = calcular_intersecciones(function_str)
+        self.output_area.delete("1.0", tk.END)
+        self.output_area.insert(tk.END, "Analizando...\n")
+        
+        # Realizando el analisis matematico
+        dominio = self.backend.calcular_dominio(funcion_str)
+        recorrido = self.backend.calcular_recorrido(funcion_str)
+        interseccion_y, interseccion_x = self.backend.calcular_intersecciones(funcion_str)
+        
+        resultados_str = f"Dominio: {dominio}\n"
+        resultados_str += f"Recorrido: {recorrido}\n"
+        resultados_str += f"{interseccion_y}\n"
+        resultados_str += f"{interseccion_x}\n"
+        
+        punto_evaluado = None
+        if valor_evaluar_str:
+            try:
+                valor_evaluar = float(valor_evaluar_str)
+                resultado_eval, pasos = self.backend.evaluar_funcion(funcion_str, valor_evaluar)
+                if isinstance(resultado_eval, str):
+                    messagebox.showerror("Error al evaluar", resultado_eval)
+                    return
+                resultados_str += "\n--- Evaluacion ---\n"
+                resultados_str += "\n".join(pasos)
+                resultados_str += f"\nPar ordenado: ({valor_evaluar}, {resultado_eval})"
+                punto_evaluado = (valor_evaluar, resultado_eval)
+            except ValueError:
+                messagebox.showerror("Error de entrada", "El valor para evaluar no es un numero")
+                return
+        
+        self.output_area.delete("1.0", tk.END)
+        self.output_area.insert(tk.END, resultados_str)
+        
+        # Llamando al modulo de graficado
+        graficar_funcion(funcion_str, punto_evaluado=punto_evaluado, intersecciones=(interseccion_x, interseccion_y))
+
+    def limpiar_campos(self):
+        # Funcion mejorada para limpiar los campos solo si hay contenido
+        output_content = self.output_area.get("1.0", tk.END).strip()
+        funcion_content = self.input_funcion.get().strip()
+        evaluar_content = self.input_evaluar.get().strip()
+        
+        # Verificamos si hay contenido real para limpiar
+        if not output_content and funcion_content == "ej: 2*x**2 + 3*x - 5" and evaluar_content == "ej: 2 o 0.5":
+            messagebox.showinfo("Limpiar", "No hay nada que limpiar")
+            return
+
+        # Si hay contenido, procedemos a limpiar
+        self.input_funcion.delete(0, tk.END)
+        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5")
+        self.input_funcion.config(foreground='#A0A0A0')
+        
+        self.input_evaluar.delete(0, tk.END)
+        self.input_evaluar.insert(0, "ej: 2 o 0.5")
+        self.input_evaluar.config(foreground='#A0A0A0')
+        
+        self.output_area.delete("1.0", tk.END)
+        messagebox.showinfo("Limpiar", "Campos limpiados correctamente")
+
+    def mostrar_ayuda(self):
+        mensaje = """
+            Para ingresar funciones, utiliza la siguiente sintaxis:
             
-            output = " Analisis Matematico \n"
-            output += f"Dominio: {dominio}\n"
-            output += f"Interseccion con el Eje Y: {y_int}\n"
-            output += f"Interseccion con el Eje X: {x_int}\n"
+            - Suma: +
+            - Resta: -
+            - Multiplicacion: *
+            - Division: /
+            - Potencia: ** o ^
+            - Raiz cuadrada: sqrt(x)
             
-            punto_evaluado = None
-            if eval_str:
-                paso_a_paso, punto = evaluar_punto(function_str, eval_str)
-                output += "\n Evaluacion del Punto \n"
-                output += paso_a_paso
-                punto_evaluado = punto
-            
-            self.results_text.insert(tk.END, output)
-
-            generar_grafico(function_str, punto_evaluado)
-
-        except Exception as e:
-            self.results_text.insert(tk.END, f"Ocurrio un error: {e}")
-        
-        self.results_text.config(state='disabled')
-
-    def clear_fields(self):
-        self.function_entry.delete(0, tk.END)
-        self.eval_entry.delete(0, tk.END)
-        self.results_text.config(state='normal')
-        self.results_text.delete(1.0, tk.END)
-        self.results_text.config(state='disabled')
-
-    def show_help(self):
-        help_message = """
-        **Como ingresar una funcion:**
-        
-        Utilice los siguientes operadores para escribir su funcion en el campo "Funcion f(x)":
-        
-        +   Suma: Para sumar terminos Ejemplo: x + 2
-        -   Resta: Para restar terminos Ejemplo: x - 5
-        * Multiplicacion: Use un asterisco para multiplicar Ejemplo: 3*x
-        /   Division: Para crear funciones racionales Ejemplo: (x + 1) / (x - 2)
-        ** Exponente: Use dos asteriscos para potencias Ejemplo: x**2 para x²
-        
-        **Ejemplos:**
-        
-        - Para 3x**2 + 2x - 1, ingrese: 3*x**2 + 2*x - 1
-        - Para (x+1)/(x-2), ingrese: (x+1)/(x-2)
+            Ejemplos de funciones:
+            - Funcion lineal: 2*x + 3
+            - Funcion cuadratica: x**2 - 4*x
+            - Funcion racional: (x - 1) / (x + 2)
+            - Funcion con raiz: sqrt(x + 1)
         """
-        messagebox.showinfo("Ayuda - Sintaxis de la Funcion", help_message)
+        messagebox.showinfo("Ayuda de Sintaxis", mensaje)
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = FunctionAnalyzerApp(root)
-    root.mainloop()
+
+
+
+
+
+# interfaz_usuario.py
+
+import tkinter as tk
+from tkinter import messagebox
+from analisis_funciones import AnalizadorFunciones
+from visualizacion_graficos import graficar_funcion
+
+class AnalizadorFuncionesGUI(tk.Tk):
+    def __init__(self, backend):
+        super().__init__()
+        
+        self.backend = backend
+        self.title("Analizador de Funciones")
+        
+        # --- LINEA MODIFICADA: Ventana no redimensionable ---
+        self.resizable(False, False)
+        
+        # --- LINEAS AÑADIDAS: Centrar la ventana ---
+        window_width = 800
+        window_height = 600
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        position_top = int(screen_height / 2 - window_height / 2)
+        position_right = int(screen_width / 2 - window_width / 2)
+        self.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
+        
+        self.config(bg="#E6E6E6") 
+
+        self.setup_ui()
+        
+    def setup_ui(self):
+        # Frame principal para centrar el contenido y aplicar margenes
+        main_frame = tk.Frame(self, bg="#E6E6E6", padx=50, pady=50)
+        main_frame.pack(expand=True, fill="both")
+        
+        # Etiqueta e input para la funcion
+        label_funcion = tk.Label(main_frame, text="Ingresa la funcion f(x):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
+        label_funcion.pack(pady=(0, 5))
+        
+        self.input_funcion = tk.Entry(main_frame, width=40, font=("Arial", 12))
+        self.input_funcion.pack()
+        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5") 
+        
+        # Estilo para el texto placeholder
+        self.input_funcion.config(foreground="#A0A0A0")
+
+        # Espacio entre inputs
+        spacer1 = tk.Frame(main_frame, height=30, bg="#E6E6E6") 
+        spacer1.pack()
+        
+        # Etiqueta e input para el valor a evaluar
+        label_evaluar = tk.Label(main_frame, text="Ingresa un valor para evaluar (opcional):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
+        label_evaluar.pack(pady=(0, 5))
+        
+        self.input_evaluar = tk.Entry(main_frame, width=40, font=("Arial", 12))
+        self.input_evaluar.pack()
+        self.input_evaluar.insert(0, "ej: 2 o 0.5")
+        
+        # Estilo para el texto placeholder
+        self.input_evaluar.config(foreground="#A0A0A0")
+        
+        # Frame para los botones
+        button_frame = tk.Frame(main_frame, bg="#E6E6E6")
+        button_frame.pack(pady=20)
+        
+        # Colores de los botones
+        self.color_analizar = '#4CAF50'
+        self.color_analizar_hover = '#367c39'
+        self.color_limpiar = '#F44336'
+        self.color_limpiar_hover = '#c82333'
+        self.color_ayuda = '#2196F3'
+        self.color_ayuda_hover = '#1976D2'
+
+        # Botones de accion
+        self.boton_limpiar = tk.Button(button_frame, text="Limpiar", command=self.limpiar_campos, 
+                                     bg=self.color_limpiar, fg='white', font=("Arial", 12, "bold"), 
+                                     relief='flat', padx=15, pady=8, bd=0)
+        self.boton_limpiar.pack(side="left", padx=5)
+        self.boton_limpiar.bind("<Enter>", lambda e: self.on_enter(e, self.color_limpiar_hover))
+        self.boton_limpiar.bind("<Leave>", lambda e: self.on_leave(e, self.color_limpiar))
+
+        self.boton_analizar = tk.Button(button_frame, text="Analizar y Graficar", command=self.analizar_y_graficar, 
+                                      bg=self.color_analizar, fg='white', font=("Arial", 12, "bold"), 
+                                      relief='flat', padx=15, pady=8, bd=0)
+        self.boton_analizar.pack(side="left", padx=5)
+        self.boton_analizar.bind("<Enter>", lambda e: self.on_enter(e, self.color_analizar_hover))
+        self.boton_analizar.bind("<Leave>", lambda e: self.on_leave(e, self.color_analizar))
+
+        self.boton_ayuda = tk.Button(button_frame, text="Ayuda", command=self.mostrar_ayuda, 
+                                    bg=self.color_ayuda, fg='white', font=("Arial", 12, "bold"), 
+                                    relief='flat', padx=15, pady=8, bd=0)
+        self.boton_ayuda.pack(side="left", padx=5)
+        self.boton_ayuda.bind("<Enter>", lambda e: self.on_enter(e, self.color_ayuda_hover))
+        self.boton_ayuda.bind("<Leave>", lambda e: self.on_leave(e, self.color_ayuda))
+
+        # Area de resultados
+        self.output_area = tk.Text(main_frame, height=10, width=60, font=("Arial", 12), bg='#F8F8F8', bd=1, relief="flat")
+        self.output_area.pack(pady=(10, 0), expand=True, fill="both")
+        
+        # Vincular eventos para el texto placeholder
+        self.input_funcion.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
+        self.input_funcion.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
+        self.input_evaluar.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_evaluar, "ej: 2 o 0.5"))
+        self.input_evaluar.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_evaluar, "ej: 2 o 0.5"))
+
+    def on_enter(self, event, color):
+        event.widget.config(bg=color)
+
+    def on_leave(self, event, color):
+        event.widget.config(bg=color)
+
+    def on_focus_in(self, entry, placeholder):
+        if entry.get() == placeholder:
+            entry.delete(0, tk.END)
+            entry.config(foreground='#333333')
+
+    def on_focus_out(self, entry, placeholder):
+        if entry.get() == "":
+            entry.insert(0, placeholder)
+            entry.config(foreground='#A0A0A0')
+            
+    def analizar_y_graficar(self):
+        funcion_str = self.input_funcion.get()
+        valor_evaluar_str = self.input_evaluar.get()
+        
+        if funcion_str == "ej: 2*x**2 + 3*x - 5":
+            funcion_str = ""
+        if valor_evaluar_str == "ej: 2 o 0.5":
+            valor_evaluar_str = ""
+            
+        if not funcion_str:
+            messagebox.showwarning("Error de entrada", "No me pasaste ninguna funcion eh, intentalo de nuevo")
+            return
+
+        self.output_area.delete("1.0", tk.END)
+        self.output_area.insert(tk.END, "Analizando...\n")
+        
+        # Realizando el analisis matematico
+        dominio = self.backend.calcular_dominio(funcion_str)
+        recorrido = self.backend.calcular_recorrido(funcion_str)
+        interseccion_y, interseccion_x = self.backend.calcular_intersecciones(funcion_str)
+        
+        resultados_str = f"Dominio: {dominio}\n"
+        resultados_str += f"Recorrido: {recorrido}\n"
+        resultados_str += f"{interseccion_y}\n"
+        resultados_str += f"{interseccion_x}\n"
+        
+        punto_evaluado = None
+        if valor_evaluar_str:
+            try:
+                valor_evaluar = float(valor_evaluar_str)
+                resultado_eval, pasos = self.backend.evaluar_funcion(funcion_str, valor_evaluar)
+                if isinstance(resultado_eval, str):
+                    messagebox.showerror("Error al evaluar", resultado_eval)
+                    return
+                resultados_str += "\n--- Evaluacion ---\n"
+                resultados_str += "\n".join(pasos)
+                resultados_str += f"\nPar ordenado: ({valor_evaluar}, {resultado_eval})"
+                punto_evaluado = (valor_evaluar, resultado_eval)
+            except ValueError:
+                messagebox.showerror("Error de entrada", "El valor para evaluar no es un numero")
+                return
+        
+        self.output_area.delete("1.0", tk.END)
+        self.output_area.insert(tk.END, resultados_str)
+        
+        # Llamando al modulo de graficado
+        graficar_funcion(funcion_str, punto_evaluado=punto_evaluado, intersecciones=(interseccion_x, interseccion_y))
+
+    def limpiar_campos(self):
+        # Funcion mejorada para limpiar los campos solo si hay contenido
+        output_content = self.output_area.get("1.0", tk.END).strip()
+        funcion_content = self.input_funcion.get().strip()
+        evaluar_content = self.input_evaluar.get().strip()
+        
+        # Verificamos si hay contenido real para limpiar
+        if not output_content and funcion_content == "ej: 2*x**2 + 3*x - 5" and evaluar_content == "ej: 2 o 0.5":
+            messagebox.showinfo("Limpiar", "No hay nada que limpiar.")
+            return
+
+        # Si hay contenido, procedemos a limpiar
+        self.input_funcion.delete(0, tk.END)
+        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5")
+        self.input_funcion.config(foreground='#A0A0A0')
+        
+        self.input_evaluar.delete(0, tk.END)
+        self.input_evaluar.insert(0, "ej: 2 o 0.5")
+        self.input_evaluar.config(foreground='#A0A0A0')
+        
+        self.output_area.delete("1.0", tk.END)
+        messagebox.showinfo("Limpiar", "Campos limpiados correctamente!")
+
+    def mostrar_ayuda(self):
+        mensaje = """
+            Para ingresar funciones, utiliza la siguiente sintaxis:
+            
+            - Suma: +
+            - Resta: -
+            - Multiplicacion: *
+            - Division: /
+            - Potencia: ** o ^
+            - Raiz cuadrada: sqrt(x)
+            
+            Ejemplos de funciones:
+            - Funcion lineal: 2*x + 3
+            - Funcion cuadratica: x**2 - 4*x
+            - Funcion racional: (x - 1) / (x + 2)
+            - Funcion con raiz: sqrt(x + 1)
+        """
+        messagebox.showinfo("Ayuda de Sintaxis", mensaje)
