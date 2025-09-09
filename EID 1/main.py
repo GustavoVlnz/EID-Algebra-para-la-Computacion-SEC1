@@ -6,9 +6,9 @@ def main():
     print("--- Analizador de Funciones ---")
     
     # campo para ingresar la funcion
-    funcion_str = input("Ingrese una función (ej. 2*x**2 + 2*x): ")
+    funcion_str = input("Ingrese una funcion (ej. 2*x**2 + 2*x): ")
     if not funcion_str:
-        print("Debe ingresar una función. Saliendo...")
+        print("Debe ingresar una funcion. Saliendo...")
         sys.exit()
 
     # campo opcional para ingresar un valor a evaluar
@@ -19,7 +19,7 @@ def main():
         dominio = calcular_dominio(funcion_str)
         y_int, x_int = calcular_intersecciones(funcion_str)
         
-        print("\n--- Resultados del Análisis Matemático ---")
+        print("\n--- Resultados del Analisis Matemático ---")
         print(f"Dominio: {dominio}")
         print(f"Intersección con el Eje Y: {y_int}")
         print(f"Intersección con el Eje X: {x_int}")
@@ -28,7 +28,7 @@ def main():
         # evaluar el punto si se ingreso un valor
         if valor_x_str:
             paso_a_paso, punto = evaluar_punto(funcion_str, valor_x_str)
-            print("\n--- Evaluación del Punto ---")
+            print("\n--- Evaluacion del Punto ---")
             print(paso_a_paso)
             if punto:
                 punto_resultante = punto
@@ -37,7 +37,7 @@ def main():
         generar_grafico(funcion_str, punto_evaluado=punto_resultante)
 
     except Exception as e:
-        print(f"Ocurrió un error inesperado: {e}")
+        print(f"Ha ocurrido un error inesperado: {e}")
 
 if __name__ == "__main__":
     main()
