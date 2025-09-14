@@ -35,7 +35,7 @@ class MainWindow(QtWidgets.QMainWindow):
         left.addLayout(form)
 
         self.ed_func = QtWidgets.QLineEdit()
-        self.ed_func.setPlaceholderText("Ingresa f(x). Ej: (x-1)/(x+2)  |  sqrt(x+1)  |  Abs(x)")
+        self.ed_func.setPlaceholderText("Ingresa f(x). Ej: (x-1)/(x+2)  |  x**2  |  (x+1)/(x-1)")
         self.ed_func.setClearButtonEnabled(True)
         form.addRow("Función f(x):", self.ed_func)
 
@@ -90,16 +90,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Preparar expresión
         x = sp.Symbol('x', real=True)
         try:
-            f = self.backend._sympify(f_str)
-        except Exception as e:
+            f = sp.sympify(f_str)
+        except Exception:
             raise ValueError("Función no válida.")
 
         # Muestreo base + clusters en puntos críticos
         xs = self._linspace(x_min, x_max, base_pts)
-        critical = self.backend.puntos_criticos_para_grafico(f_str)
-        for c in critical:
-            if x_min < c < x_max:
-                xs.extend(self._cluster_around(c))
+        # Para asintotas se puede mejorar, de momento simple
         xs = sorted(set(xs))
 
         # Evaluación segura punto a punto
@@ -134,19 +131,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 segx.append(xv); segy.append(yv)
         flush(label_needed=first)
 
-        # Pintar asintotas verticales donde el dominio excluye el punto crítico
-        for c in critical:
-            ax.axvline(c, color='gray', linewidth=0.8, linestyle=':', alpha=0.7)
-
         # Intersecciones
         if inters:
-            xints = inters.get("x", [])
-            for i, xi in enumerate(xints):
-                ax.plot([xi], [0.0], marker='o', markersize=6,
-                        label="Intersección X" if i == 0 else "")
-            yint = inters.get("y")
-            if yint:
-                ax.plot([yint[0]], [yint[1]], marker='o', markersize=6, label="Intersección Y")
+            if inters.get("x"):
+                for i, xi in enumerate(inters["x"]):
+                    ax.plot([xi], [0.0], marker='o', markersize=6,
+                            label="Intersección X" if i == 0 else "")
+            if inters.get("y"):
+                ax.plot([inters["y"][0]], [inters["y"][1]], marker='o', markersize=6, label="Intersección Y")
 
         # Punto evaluado en color distinto
         if punto:
@@ -171,35 +163,56 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         # Analítica
-        dominio = self.backend.calcular_dominio(fstr)
-        recorrido = self.backend.calcular_recorrido(fstr)
-        inters = self.backend.calcular_intersecciones(fstr)
+        dominio, pasos_dom = self.backend.calcular_dominio(fstr)
+        recorrido, pasos_rec = self.backend.calcular_recorrido(fstr)
+        inters_y, pasos_y, inters_x, pasos_x = self.backend.calcular_intersecciones(fstr)
 
-        # Paso a paso (si vstr presente y válido por validador)
+        inters_dict = {"y": None, "x": []}
+        if not isinstance(inters_y, str) and inters_y != "no existe":
+            try:
+                y_val = float(str(inters_y).strip("()").split(",")[1])
+                inters_dict["y"] = (0.0, y_val)
+            except Exception:
+                pass
+        if "Puntos:" in inters_x:
+            try:
+                puntos = inters_x.replace("Puntos:", "").split(",")
+                inters_dict["x"] = [float(p.strip("() ").split(",")[0]) for p in puntos]
+            except Exception:
+                pass
+
+        # Paso a paso en la salida
+        lines = []
+        lines.append("=== Dominio ===")
+        lines.extend(pasos_dom)
+        lines.append("") 
+        lines.append("=== Recorrido ===")
+        lines.extend(pasos_rec)
+        lines.append("")
+        lines.append("=== Intersección con eje Y ===")
+        lines.extend(pasos_y)
+        lines.append("")
+        lines.append("=== Intersecciones con eje X ===")
+        lines.extend(pasos_x)
+
         punto = None
-        lines = [
-            f"Dominio: {dominio}",
-            f"Recorrido: {recorrido}",
-            f"Intersección Y: {inters.get('y') if inters.get('y') else 'ninguna'}",
-            f"Intersecciones X: {inters.get('x') if inters.get('x') else 'ninguna'}"
-        ]
-
         if vstr:
-            res = self.backend.evaluar_funcion(fstr, vstr)
-            lines.append("\n--- Evaluación paso a paso ---")
-            lines.extend(res.get("steps", []))
-            if res.get("ok"):
-                lines.append(f"Par ordenado: ({res['x_num']}, {res['value']})")
-                punto = (res['x_num'], res['value'])
+            val, pasos_eval = self.backend.evaluar_funcion(fstr, vstr)
+            lines.append("")
+            lines.append("=== Evaluación en un punto ===")
+            if isinstance(val, (int, float)):
+                lines.extend(pasos_eval)
+                lines.append(f"Par ordenado: ({vstr}, {val})")
+                punto = (float(vstr), val)
             else:
-                lines.append(res.get("error", "Error en evaluación"))
+                lines.append(str(val))
 
         self.out.clear()
         self.out.setPlainText("\n".join(lines))
 
         # Gráfico
         try:
-            self._plot_function(fstr, punto=punto, inters=inters)
+            self._plot_function(fstr, punto=punto, inters=inters_dict)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Gráfico", f"No se pudo graficar: {e}")
 
