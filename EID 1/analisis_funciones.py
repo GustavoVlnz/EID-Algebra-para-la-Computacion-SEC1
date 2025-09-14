@@ -3,18 +3,9 @@ from sympy import S
 from sympy.calculus.util import continuous_domain, function_range
 from sympy.solvers.solveset import solveset, solveset_real
 import re, unicodedata
-class AnalizadorFunciones:
-    """
-    Analiza funciones de una variable real. Sin NumPy.
-    API:
-      - evaluar_funcion(funcion_str, x_val_str) -> dict
-      - calcular_dominio(funcion_str) -> str
-      - calcular_recorrido(funcion_str) -> str
-      - calcular_intersecciones(funcion_str) -> {"y": (0, y0)|None, "x": [x1,...]}
-      - puntos_criticos_para_grafico(funcion_str) -> set[float]
-    """
 
-    SAFE = {
+class AnalizadorFunciones:
+    FUNCIONES_PERMITIDAS = {
         # funciones
         'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan,
         'asin': sp.asin, 'acos': sp.acos, 'atan': sp.atan,
@@ -25,23 +16,22 @@ class AnalizadorFunciones:
         # constantes
         'E': sp.E, 'pi': sp.pi,
     }
+
     def __init__(self):
-        # ±decimales, .5, 1e-3 y fracción a/b con las mismas variantes
-        self._NUM_RE = re.compile(
+        self._RE_NUM = re.compile(
             r'^[+\-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?'
             r'(?:/[+\-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?)?$'
         )
 
     def _sympify(self, s: str):
-        """Parse seguro: solo símbolo x y nombres en SAFE. Rechaza otros símbolos."""
+        """Parse controlado: solo símbolo x y nombres permitidos."""
         if not isinstance(s, str) or len(s) > 500:
-            raise ValueError("Expresión demasiado larga o inválida")
+            raise ValueError("Expresión inválida o demasiado larga.")
         x = sp.Symbol('x', real=True)
-        expr = sp.sympify(s, locals={**self.SAFE, 'x': x})
+        expr = sp.sympify(s, locals={**self.FUNCIONES_PERMITIDAS, 'x': x})
         # bloquear símbolos extraños
-        syms = list(expr.free_symbols)
-        if any(sym.name != 'x' for sym in syms):
-            raise ValueError("Solo se admite la variable x")
+        if any(sym.name != 'x' for sym in expr.free_symbols):
+            raise ValueError("Solo se admite la variable x.")
         return expr
 
     def _pretty(self, expr) -> str:
@@ -52,7 +42,7 @@ class AnalizadorFunciones:
             return str(expr)
 
     def _sanitize_number(self, s: str) -> str:
-        # Normaliza Unicode, cambia coma por punto, quita espacios y dashes Unicode
+        # Normaliza Unicode, cambia coma por punto, quita espacios y guiones Unicode
         s = unicodedata.normalize('NFKC', s)
         s = s.replace('\u2212','-').replace('\u2012','-').replace('\u2013','-').replace('\u2014','-').replace('\u2015','-')
         s = re.sub(r'\s+', '', s)
@@ -61,18 +51,17 @@ class AnalizadorFunciones:
 
     def _to_exact(self, val_str: str):
         if not val_str or val_str.strip() == "":
-            raise ValueError("Valor vacío")
+            raise ValueError("Valor vacío.")
         s = self._sanitize_number(val_str)
-        # permite ".5" -> "0.5" implícito vía nsimplify
-        if not self._NUM_RE.fullmatch(s):
-            raise ValueError("Valor para evaluar inválido")
+        if not self._RE_NUM.fullmatch(s):
+            raise ValueError("Valor inválido para evaluar.")
         # fracción
         if '/' in s:
             a, b = s.split('/', 1)
             a = sp.nsimplify(a)
             b = sp.nsimplify(b)
             if b == 0:
-                raise ValueError("División por cero en ese valor")
+                raise ValueError("División por cero en el valor.")
             return a / b
         # número simple
         return sp.nsimplify(s)
@@ -89,7 +78,7 @@ class AnalizadorFunciones:
         try:
             f = self._sympify(funcion_str)
         except Exception:
-            return {"ok": False, "error": "Función no válida.", "steps": []}
+            return {"ok": False, "error": "Función inválida.", "steps": []}
 
         try:
             xv = self._to_exact(x_val_str)
@@ -99,11 +88,11 @@ class AnalizadorFunciones:
         pasos.append(f"Función: f(x) = {self._pretty(f)}")
         pasos.append(f"Sustitución: x = {self._pretty(xv)}")
 
-        # Validación dominio puntual
+        # Validación de dominio puntual
         try:
             den = self._denominador(f)
             if sp.simplify(den.subs(x, xv)) == 0:
-                pasos.append("Denominador en 0 ⇒ punto fuera del dominio.")
+                pasos.append("Denominador = 0 ⇒ punto fuera del dominio.")
                 return {"ok": False, "error": "División por cero en ese punto.", "steps": pasos}
         except Exception:
             pass
@@ -129,9 +118,9 @@ class AnalizadorFunciones:
 
             # Chequeos
             if exacto.has(sp.I) or (hasattr(exacto, "is_real") and exacto.is_real is False):
-                return {"ok": False, "error": "Resultado complejo en ese punto.", "steps": pasos}
+                return {"ok": False, "error": "Resultado complejo.", "steps": pasos}
             if exacto.has(sp.zoo) or exacto.has(sp.oo) or exacto.has(-sp.oo):
-                return {"ok": False, "error": "Valor no finito en ese punto.", "steps": pasos}
+                return {"ok": False, "error": "Resultado no finito.", "steps": pasos}
 
             pasos.append(f"5) Valor exacto:\n{self._pretty(exacto)}")
             approx = sp.N(exacto)
@@ -174,7 +163,7 @@ class AnalizadorFunciones:
         except Exception:
             return {"y": None, "x": []}
 
-        # Y si 0 ∈ dominio
+        # Intersección con eje Y si 0 ∈ dominio
         y_pair = None
         try:
             dom0 = continuous_domain(f, x, S.Reals)
@@ -186,23 +175,23 @@ class AnalizadorFunciones:
             pass
 
         # Raíces reales
-        xs = []
+        x_list = []
         try:
             sol = solveset(sp.Eq(f, 0), x, domain=S.Reals)
             for s in sol:
                 try:
-                    xs.append(float(sp.N(s)))
+                    x_list.append(float(sp.N(s)))
                 except Exception:
                     continue
         except Exception:
             try:
                 sol2 = solveset_real(sp.Eq(f, 0), x)
                 for s in sol2:
-                    xs.append(float(sp.N(s)))
+                    x_list.append(float(sp.N(s)))
             except Exception:
                 pass
 
-        return {"y": y_pair, "x": xs}
+        return {"y": y_pair, "x": x_list}
 
     def puntos_criticos_para_grafico(self, funcion_str: str):
         """Candidatos a discontinuidad: ceros del denominador y fronteras de Piecewise."""
@@ -229,14 +218,13 @@ class AnalizadorFunciones:
         # Fronteras de Piecewise
         try:
             if isinstance(f, sp.Piecewise):
-                for expr, cond in f.as_expr_set_pairs():
+                for _, cond in f.as_expr_set_pairs():
                     if hasattr(cond, 'boundary'):
                         b = cond.boundary
-                        # b puede ser unión; iterar
                         for el in getattr(b, 'args', (b,)):
                             try:
                                 for s in getattr(el, 'args', (el,)):
-                                    if s.is_number:
+                                    if getattr(s, "is_number", False):
                                         critical.add(float(sp.N(s)))
                             except Exception:
                                 continue
