@@ -1,425 +1,211 @@
-import tkinter as tk
-from tkinter import messagebox
+from PyQt6 import QtWidgets, QtGui, QtCore
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+import math
+import sympy as sp
+
 from analisis_funciones import AnalizadorFunciones
-from visualizacion_graficos import graficar_funcion
 
-class AnalizadorFuncionesGUI(tk.Tk):
-    def __init__(self, backend):
+class MplCanvas(FigureCanvas):
+    def __init__(self, parent=None):
+        self.fig = Figure(figsize=(6, 4), tight_layout=True)
+        self.ax = self.fig.add_subplot(111)
+        super().__init__(self.fig)
+        self.setParent(parent)
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):
         super().__init__()
-        
-        self.backend = backend
-        self.title("Analizador de Funciones")
-        self.geometry("800x600")
-        self.config(bg="#E6E6E6") 
+        self.setWindowTitle("Analizador de Funciones")
+        self.resize(1100, 680)
+        self.backend = AnalizadorFunciones()
+        self._build_ui()
 
-        self.resizable(False, False)
+    # ---------- UI ----------
+    def _build_ui(self):
+        central = QtWidgets.QWidget()
+        self.setCentralWidget(central)
+        root = QtWidgets.QHBoxLayout(central)
 
-        self.setup_ui()
+        # Izquierda: inputs y resultados
+        left = QtWidgets.QVBoxLayout()
+        root.addLayout(left, 3)
 
-        # --- Centrar la ventana ---
-        window_width = 800
-        window_height = 600
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        position_top = int(screen_height / 2 - window_height / 2)
-        position_right = int(screen_width / 2 - window_width / 2)
-        self.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
-        
-        self.config(bg="#E6E6E6")
-        
-    def setup_ui(self):
-        # Frame principal para centrar el contenido y aplicar margenes
-        main_frame = tk.Frame(self, bg="#E6E6E6", padx=50, pady=50)
-        main_frame.pack(expand=True, fill="both")
-        
-        # Etiqueta e input para la funcion
-        label_funcion = tk.Label(main_frame, text="Ingresa la funcion f(x):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
-        label_funcion.pack(pady=(0, 5))
-        
-        self.input_funcion = tk.Entry(main_frame, width=40, font=("Arial", 12))
-        self.input_funcion.pack()
-        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5") 
-        
-        # Estilo para el texto placeholder
-        self.input_funcion.config(foreground="#A0A0A0")
+        form = QtWidgets.QFormLayout()
+        left.addLayout(form)
 
-        # Espacio entre inputs
-        spacer1 = tk.Frame(main_frame, height=30, bg="#E6E6E6") 
-        spacer1.pack()
-        
-        # Etiqueta e input para el valor a evaluar
-        label_evaluar = tk.Label(main_frame, text="Ingresa un valor para evaluar (opcional):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
-        label_evaluar.pack(pady=(0, 5))
-        
-        self.input_evaluar = tk.Entry(main_frame, width=40, font=("Arial", 12))
-        self.input_evaluar.pack()
-        self.input_evaluar.insert(0, "ej: 2 o 0.5")
-        
-        # Estilo para el texto placeholder
-        self.input_evaluar.config(foreground="#A0A0A0")
-        
-        # Frame para los botones
-        button_frame = tk.Frame(main_frame, bg="#E6E6E6")
-        button_frame.pack(pady=20)
-        
-        # Colores de los botones
-        self.color_analizar = '#4CAF50'
-        self.color_analizar_hover = '#367c39'
-        self.color_limpiar = '#F44336'
-        self.color_limpiar_hover = '#c82333'
-        self.color_ayuda = '#2196F3'
-        self.color_ayuda_hover = '#1976D2'
+        self.ed_func = QtWidgets.QLineEdit()
+        self.ed_func.setPlaceholderText("Ingresa f(x). Ej: (x-1)/(x+2)  |  sqrt(x+1)  |  Abs(x)")
+        self.ed_func.setClearButtonEnabled(True)
+        form.addRow("Función f(x):", self.ed_func)
 
-        # Botones de accion
-        self.boton_limpiar = tk.Button(button_frame, text="Limpiar", command=self.limpiar_campos, 
-                                     bg=self.color_limpiar, fg='white', font=("Arial", 12, "bold"), 
-                                     relief='flat', padx=15, pady=8, bd=0)
-        self.boton_limpiar.pack(side="left", padx=5)
-        self.boton_limpiar.bind("<Enter>", lambda e: self.on_enter(e, self.color_limpiar_hover))
-        self.boton_limpiar.bind("<Leave>", lambda e: self.on_leave(e, self.color_limpiar))
+        self.ed_x = QtWidgets.QLineEdit()
+        self.ed_x.setPlaceholderText("x a evaluar (opcional). Ej: 2  |  -0.5  |  3/5")
+        self.ed_x.setClearButtonEnabled(True)
+        # Validador simple: número o fracción a/b
+        rx = QtCore.QRegularExpression(r"^\s*[-+]?\d+(\.\d+)?\s*(/\s*[-+]?\d+(\.\d+)?)?\s*$")
+        self.ed_x.setValidator(QtGui.QRegularExpressionValidator(rx))
+        form.addRow("Valor x:", self.ed_x)
 
-        self.boton_analizar = tk.Button(button_frame, text="Analizar y Graficar", command=self.analizar_y_graficar, 
-                                      bg=self.color_analizar, fg='white', font=("Arial", 12, "bold"), 
-                                      relief='flat', padx=15, pady=8, bd=0)
-        self.boton_analizar.pack(side="left", padx=5)
-        self.boton_analizar.bind("<Enter>", lambda e: self.on_enter(e, self.color_analizar_hover))
-        self.boton_analizar.bind("<Leave>", lambda e: self.on_leave(e, self.color_analizar))
+        btn_row = QtWidgets.QHBoxLayout()
+        left.addLayout(btn_row)
+        self.btn_run = QtWidgets.QPushButton("Analizar y Graficar")
+        self.btn_clear = QtWidgets.QPushButton("Limpiar")
+        btn_row.addWidget(self.btn_run)
+        btn_row.addWidget(self.btn_clear)
 
-        self.boton_ayuda = tk.Button(button_frame, text="Ayuda", command=self.mostrar_ayuda, 
-                                    bg=self.color_ayuda, fg='white', font=("Arial", 12, "bold"), 
-                                    relief='flat', padx=15, pady=8, bd=0)
-        self.boton_ayuda.pack(side="left", padx=5)
-        self.boton_ayuda.bind("<Enter>", lambda e: self.on_enter(e, self.color_ayuda_hover))
-        self.boton_ayuda.bind("<Leave>", lambda e: self.on_leave(e, self.color_ayuda))
+        self.out = QtWidgets.QTextEdit()
+        self.out.setReadOnly(True)
+        self.out.setPlaceholderText("Resultados estructurados y evaluación paso a paso aparecerán aquí.")
+        self.out.setFont(QtGui.QFont("Consolas", 10))
+        left.addWidget(self.out, 1)
 
-        # Area de resultados
-        self.output_area = tk.Text(main_frame, height=10, width=60, font=("Arial", 12), bg='#F8F8F8', bd=1, relief="flat")
-        self.output_area.pack(pady=(10, 0), expand=True, fill="both")
-        
-        # Vincular eventos para el texto placeholder
-        self.input_funcion.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
-        self.input_funcion.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
-        self.input_evaluar.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_evaluar, "ej: 2 o 0.5"))
-        self.input_evaluar.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_evaluar, "ej: 2 o 0.5"))
+        # Derecha: gráfico embebido
+        right = QtWidgets.QVBoxLayout()
+        root.addLayout(right, 4)
+        self.canvas = MplCanvas(self)
+        right.addWidget(self.canvas)
 
-    def on_enter(self, event, color):
-        event.widget.config(bg=color)
+        # Eventos
+        self.btn_run.clicked.connect(self._run)
+        self.btn_clear.clicked.connect(self._clear)
 
-    def on_leave(self, event, color):
-        event.widget.config(bg=color)
+    # ---------- Utilidades ----------
+    def _linspace(self, a: float, b: float, n: int):
+        if n < 2:
+            return [a]
+        step = (b - a) / (n - 1)
+        return [a + i * step for i in range(n)]
 
-    def on_focus_in(self, entry, placeholder):
-        if entry.get() == placeholder:
-            entry.delete(0, tk.END)
-            entry.config(foreground='#333333')
+    def _cluster_around(self, c: float, eps: float = 1e-3):
+        # puntos densos alrededor de c para dibujar cerca de asintotas/fronteras
+        return [c - 10*eps, c - 3*eps, c - eps, c - eps/3, c - eps/10,
+                c + eps/10, c + eps/3, c + eps, c + 3*eps, c + 10*eps]
 
-    def on_focus_out(self, entry, placeholder):
-        if entry.get() == "":
-            entry.insert(0, placeholder)
-            entry.config(foreground='#A0A0A0')
-            
-    def analizar_y_graficar(self):
-        funcion_str = self.input_funcion.get()
-        valor_evaluar_str = self.input_evaluar.get()
-        
-        if funcion_str == "ej: 2*x**2 + 3*x - 5":
-            funcion_str = ""
-        if valor_evaluar_str == "ej: 2 o 0.5":
-            valor_evaluar_str = ""
-            
-        if not funcion_str:
-            messagebox.showwarning("Error de entrada", "No ingresaste ninguna funcion")
-            return
+    def _plot_function(self, f_str: str, punto=None, inters=None,
+                       x_min=-10, x_max=10, base_pts=800, y_clip=50.0):
+        ax = self.canvas.ax
+        ax.clear()
 
-        self.output_area.delete("1.0", tk.END)
-        self.output_area.insert(tk.END, "Analizando...\n")
-        
-        # Realizando el analisis matematico
-        dominio = self.backend.calcular_dominio(funcion_str)
-        recorrido = self.backend.calcular_recorrido(funcion_str)
-        interseccion_y, interseccion_x = self.backend.calcular_intersecciones(funcion_str)
-        
-        resultados_str = f"Dominio: {dominio}\n"
-        resultados_str += f"Recorrido: {recorrido}\n"
-        resultados_str += f"{interseccion_y}\n"
-        resultados_str += f"{interseccion_x}\n"
-        
-        punto_evaluado = None
-        if valor_evaluar_str:
+        # Preparar expresión
+        x = sp.Symbol('x', real=True)
+        try:
+            f = self.backend._sympify(f_str)
+        except Exception as e:
+            raise ValueError("Función no válida.")
+
+        # Muestreo base + clusters en puntos críticos
+        xs = self._linspace(x_min, x_max, base_pts)
+        critical = self.backend.puntos_criticos_para_grafico(f_str)
+        for c in critical:
+            if x_min < c < x_max:
+                xs.extend(self._cluster_around(c))
+        xs = sorted(set(xs))
+
+        # Evaluación segura punto a punto
+        ys = []
+        for xv in xs:
             try:
-                valor_evaluar = float(valor_evaluar_str)
-                resultado_eval, pasos = self.backend.evaluar_funcion(funcion_str, valor_evaluar)
-                if isinstance(resultado_eval, str):
-                    messagebox.showerror("Error al evaluar", resultado_eval)
-                    return
-                resultados_str += "\n--- Evaluacion ---\n"
-                resultados_str += "\n".join(pasos)
-                resultados_str += f"\nPar ordenado: ({valor_evaluar}, {resultado_eval})"
-                punto_evaluado = (valor_evaluar, resultado_eval)
-            except ValueError:
-                messagebox.showerror("Error de entrada", "El valor para evaluar no es un numero")
-                return
-        
-        self.output_area.delete("1.0", tk.END)
-        self.output_area.insert(tk.END, resultados_str)
-        
-        # Llamando al modulo de graficado
-        graficar_funcion(funcion_str, punto_evaluado=punto_evaluado, intersecciones=(interseccion_x, interseccion_y))
+                yv = f.subs(x, xv)
+                if yv.is_real is False:
+                    ys.append(None); continue
+                y = float(yv)
+                if not math.isfinite(y) or abs(y) > y_clip:
+                    ys.append(None)
+                else:
+                    ys.append(y)
+            except Exception:
+                ys.append(None)
 
-    def limpiar_campos(self):
-        # Funcion mejorada para limpiar los campos solo si hay contenido
-        output_content = self.output_area.get("1.0", tk.END).strip()
-        funcion_content = self.input_funcion.get().strip()
-        evaluar_content = self.input_evaluar.get().strip()
-        
-        # Verificamos si hay contenido real para limpiar
-        if not output_content and funcion_content == "ej: 2*x**2 + 3*x - 5" and evaluar_content == "ej: 2 o 0.5":
-            messagebox.showinfo("Limpiar", "No hay nada que limpiar")
+        # Trazo por segmentos (corta en None)
+        segx, segy = [], []
+        def flush(label_needed=False):
+            nonlocal segx, segy
+            if segx:
+                ax.plot(segx, segy, linewidth=2.0,
+                        label=f"f(x) = {f_str}" if label_needed else "")
+                segx, segy = [], []
+
+        first = True
+        for xv, yv in zip(xs, ys):
+            if yv is None:
+                flush(label_needed=first); first = False
+            else:
+                segx.append(xv); segy.append(yv)
+        flush(label_needed=first)
+
+        # Pintar asintotas verticales donde el dominio excluye el punto crítico
+        for c in critical:
+            ax.axvline(c, color='gray', linewidth=0.8, linestyle=':', alpha=0.7)
+
+        # Intersecciones
+        if inters:
+            xints = inters.get("x", [])
+            for i, xi in enumerate(xints):
+                ax.plot([xi], [0.0], marker='o', markersize=6,
+                        label="Intersección X" if i == 0 else "")
+            yint = inters.get("y")
+            if yint:
+                ax.plot([yint[0]], [yint[1]], marker='o', markersize=6, label="Intersección Y")
+
+        # Punto evaluado en color distinto
+        if punto:
+            ax.plot([punto[0]], [punto[1]], marker='o', markersize=8, label=f"Punto ({punto[0]}, {punto[1]})")
+
+        ax.axhline(0, color='gray', linewidth=0.8, linestyle='--')
+        ax.axvline(0, color='gray', linewidth=0.8, linestyle='--')
+        ax.grid(True, which='both', linewidth=0.3)
+        ax.set_title("Gráfico de la función")
+        ax.set_xlabel("Eje X")
+        ax.set_ylabel("Eje Y")
+        ax.legend()
+        self.canvas.draw()
+
+    # ---------- Acciones ----------
+    def _run(self):
+        fstr = self.ed_func.text().strip()
+        vstr = self.ed_x.text().strip()
+
+        if not fstr:
+            QtWidgets.QMessageBox.warning(self, "Entrada", "Ingresa la función.")
             return
 
-        # Si hay contenido, procedemos a limpiar
-        self.input_funcion.delete(0, tk.END)
-        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5")
-        self.input_funcion.config(foreground='#A0A0A0')
-        
-        self.input_evaluar.delete(0, tk.END)
-        self.input_evaluar.insert(0, "ej: 2 o 0.5")
-        self.input_evaluar.config(foreground='#A0A0A0')
-        
-        self.output_area.delete("1.0", tk.END)
-        messagebox.showinfo("Limpiar", "Campos limpiados correctamente")
+        # Analítica
+        dominio = self.backend.calcular_dominio(fstr)
+        recorrido = self.backend.calcular_recorrido(fstr)
+        inters = self.backend.calcular_intersecciones(fstr)
 
-    def mostrar_ayuda(self):
-        mensaje = """
-            Para ingresar funciones, utiliza la siguiente sintaxis:
-            
-            - Suma: +
-            - Resta: -
-            - Multiplicacion: *
-            - Division: /
-            - Potencia: ** o ^
-            - Raiz cuadrada: sqrt(x)
-            
-            Ejemplos de funciones:
-            - Funcion lineal: 2*x + 3
-            - Funcion cuadratica: x**2 - 4*x
-            - Funcion racional: (x - 1) / (x + 2)
-            - Funcion con raiz: sqrt(x + 1)
-        """
-        messagebox.showinfo("Ayuda de Sintaxis", mensaje)
+        # Paso a paso (si vstr presente y válido por validador)
+        punto = None
+        lines = [
+            f"Dominio: {dominio}",
+            f"Recorrido: {recorrido}",
+            f"Intersección Y: {inters.get('y') if inters.get('y') else 'ninguna'}",
+            f"Intersecciones X: {inters.get('x') if inters.get('x') else 'ninguna'}"
+        ]
 
+        if vstr:
+            res = self.backend.evaluar_funcion(fstr, vstr)
+            lines.append("\n--- Evaluación paso a paso ---")
+            lines.extend(res.get("steps", []))
+            if res.get("ok"):
+                lines.append(f"Par ordenado: ({res['x_num']}, {res['value']})")
+                punto = (res['x_num'], res['value'])
+            else:
+                lines.append(res.get("error", "Error en evaluación"))
 
+        self.out.clear()
+        self.out.setPlainText("\n".join(lines))
 
+        # Gráfico
+        try:
+            self._plot_function(fstr, punto=punto, inters=inters)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Gráfico", f"No se pudo graficar: {e}")
 
-
-
-# interfaz_usuario.py
-
-import tkinter as tk
-from tkinter import messagebox
-from analisis_funciones import AnalizadorFunciones
-from visualizacion_graficos import graficar_funcion
-
-class AnalizadorFuncionesGUI(tk.Tk):
-    def __init__(self, backend):
-        super().__init__()
-        
-        self.backend = backend
-        self.title("Analizador de Funciones")
-        
-        # --- LINEA MODIFICADA: Ventana no redimensionable ---
-        self.resizable(False, False)
-        
-        # --- LINEAS AÑADIDAS: Centrar la ventana ---
-        window_width = 800
-        window_height = 600
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        position_top = int(screen_height / 2 - window_height / 2)
-        position_right = int(screen_width / 2 - window_width / 2)
-        self.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
-        
-        self.config(bg="#E6E6E6") 
-
-        self.setup_ui()
-        
-    def setup_ui(self):
-        # Frame principal para centrar el contenido y aplicar margenes
-        main_frame = tk.Frame(self, bg="#E6E6E6", padx=50, pady=50)
-        main_frame.pack(expand=True, fill="both")
-        
-        # Etiqueta e input para la funcion
-        label_funcion = tk.Label(main_frame, text="Ingresa la funcion f(x):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
-        label_funcion.pack(pady=(0, 5))
-        
-        self.input_funcion = tk.Entry(main_frame, width=40, font=("Arial", 12))
-        self.input_funcion.pack()
-        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5") 
-        
-        # Estilo para el texto placeholder
-        self.input_funcion.config(foreground="#A0A0A0")
-
-        # Espacio entre inputs
-        spacer1 = tk.Frame(main_frame, height=30, bg="#E6E6E6") 
-        spacer1.pack()
-        
-        # Etiqueta e input para el valor a evaluar
-        label_evaluar = tk.Label(main_frame, text="Ingresa un valor para evaluar (opcional):", bg="#E6E6E6", font=("Arial", 14, "bold"), fg="#333333")
-        label_evaluar.pack(pady=(0, 5))
-        
-        self.input_evaluar = tk.Entry(main_frame, width=40, font=("Arial", 12))
-        self.input_evaluar.pack()
-        self.input_evaluar.insert(0, "ej: 2 o 0.5")
-        
-        # Estilo para el texto placeholder
-        self.input_evaluar.config(foreground="#A0A0A0")
-        
-        # Frame para los botones
-        button_frame = tk.Frame(main_frame, bg="#E6E6E6")
-        button_frame.pack(pady=20)
-        
-        # Colores de los botones
-        self.color_analizar = '#4CAF50'
-        self.color_analizar_hover = '#367c39'
-        self.color_limpiar = '#F44336'
-        self.color_limpiar_hover = '#c82333'
-        self.color_ayuda = '#2196F3'
-        self.color_ayuda_hover = '#1976D2'
-
-        # Botones de accion
-        self.boton_limpiar = tk.Button(button_frame, text="Limpiar", command=self.limpiar_campos, 
-                                     bg=self.color_limpiar, fg='white', font=("Arial", 12, "bold"), 
-                                     relief='flat', padx=15, pady=8, bd=0)
-        self.boton_limpiar.pack(side="left", padx=5)
-        self.boton_limpiar.bind("<Enter>", lambda e: self.on_enter(e, self.color_limpiar_hover))
-        self.boton_limpiar.bind("<Leave>", lambda e: self.on_leave(e, self.color_limpiar))
-
-        self.boton_analizar = tk.Button(button_frame, text="Analizar y Graficar", command=self.analizar_y_graficar, 
-                                      bg=self.color_analizar, fg='white', font=("Arial", 12, "bold"), 
-                                      relief='flat', padx=15, pady=8, bd=0)
-        self.boton_analizar.pack(side="left", padx=5)
-        self.boton_analizar.bind("<Enter>", lambda e: self.on_enter(e, self.color_analizar_hover))
-        self.boton_analizar.bind("<Leave>", lambda e: self.on_leave(e, self.color_analizar))
-
-        self.boton_ayuda = tk.Button(button_frame, text="Ayuda", command=self.mostrar_ayuda, 
-                                    bg=self.color_ayuda, fg='white', font=("Arial", 12, "bold"), 
-                                    relief='flat', padx=15, pady=8, bd=0)
-        self.boton_ayuda.pack(side="left", padx=5)
-        self.boton_ayuda.bind("<Enter>", lambda e: self.on_enter(e, self.color_ayuda_hover))
-        self.boton_ayuda.bind("<Leave>", lambda e: self.on_leave(e, self.color_ayuda))
-
-        # Area de resultados
-        self.output_area = tk.Text(main_frame, height=10, width=60, font=("Arial", 12), bg='#F8F8F8', bd=1, relief="flat")
-        self.output_area.pack(pady=(10, 0), expand=True, fill="both")
-        
-        # Vincular eventos para el texto placeholder
-        self.input_funcion.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
-        self.input_funcion.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_funcion, "ej: 2*x**2 + 3*x - 5"))
-        self.input_evaluar.bind("<FocusIn>", lambda event: self.on_focus_in(self.input_evaluar, "ej: 2 o 0.5"))
-        self.input_evaluar.bind("<FocusOut>", lambda event: self.on_focus_out(self.input_evaluar, "ej: 2 o 0.5"))
-
-    def on_enter(self, event, color):
-        event.widget.config(bg=color)
-
-    def on_leave(self, event, color):
-        event.widget.config(bg=color)
-
-    def on_focus_in(self, entry, placeholder):
-        if entry.get() == placeholder:
-            entry.delete(0, tk.END)
-            entry.config(foreground='#333333')
-
-    def on_focus_out(self, entry, placeholder):
-        if entry.get() == "":
-            entry.insert(0, placeholder)
-            entry.config(foreground='#A0A0A0')
-            
-    def analizar_y_graficar(self):
-        funcion_str = self.input_funcion.get()
-        valor_evaluar_str = self.input_evaluar.get()
-        
-        if funcion_str == "ej: 2*x**2 + 3*x - 5":
-            funcion_str = ""
-        if valor_evaluar_str == "ej: 2 o 0.5":
-            valor_evaluar_str = ""
-            
-        if not funcion_str:
-            messagebox.showwarning("Error de entrada", "No me pasaste ninguna funcion eh, intentalo de nuevo")
-            return
-
-        self.output_area.delete("1.0", tk.END)
-        self.output_area.insert(tk.END, "Analizando...\n")
-        
-        # Realizando el analisis matematico
-        dominio = self.backend.calcular_dominio(funcion_str)
-        recorrido = self.backend.calcular_recorrido(funcion_str)
-        interseccion_y, interseccion_x = self.backend.calcular_intersecciones(funcion_str)
-        
-        resultados_str = f"Dominio: {dominio}\n"
-        resultados_str += f"Recorrido: {recorrido}\n"
-        resultados_str += f"{interseccion_y}\n"
-        resultados_str += f"{interseccion_x}\n"
-        
-        punto_evaluado = None
-        if valor_evaluar_str:
-            try:
-                valor_evaluar = float(valor_evaluar_str)
-                resultado_eval, pasos = self.backend.evaluar_funcion(funcion_str, valor_evaluar)
-                if isinstance(resultado_eval, str):
-                    messagebox.showerror("Error al evaluar", resultado_eval)
-                    return
-                resultados_str += "\n--- Evaluacion ---\n"
-                resultados_str += "\n".join(pasos)
-                resultados_str += f"\nPar ordenado: ({valor_evaluar}, {resultado_eval})"
-                punto_evaluado = (valor_evaluar, resultado_eval)
-            except ValueError:
-                messagebox.showerror("Error de entrada", "El valor para evaluar no es un numero")
-                return
-        
-        self.output_area.delete("1.0", tk.END)
-        self.output_area.insert(tk.END, resultados_str)
-        
-        # Llamando al modulo de graficado
-        graficar_funcion(funcion_str, punto_evaluado=punto_evaluado, intersecciones=(interseccion_x, interseccion_y))
-
-    def limpiar_campos(self):
-        # Funcion mejorada para limpiar los campos solo si hay contenido
-        output_content = self.output_area.get("1.0", tk.END).strip()
-        funcion_content = self.input_funcion.get().strip()
-        evaluar_content = self.input_evaluar.get().strip()
-        
-        # Verificamos si hay contenido real para limpiar
-        if not output_content and funcion_content == "ej: 2*x**2 + 3*x - 5" and evaluar_content == "ej: 2 o 0.5":
-            messagebox.showinfo("Limpiar", "No hay nada que limpiar.")
-            return
-
-        # Si hay contenido, procedemos a limpiar
-        self.input_funcion.delete(0, tk.END)
-        self.input_funcion.insert(0, "ej: 2*x**2 + 3*x - 5")
-        self.input_funcion.config(foreground='#A0A0A0')
-        
-        self.input_evaluar.delete(0, tk.END)
-        self.input_evaluar.insert(0, "ej: 2 o 0.5")
-        self.input_evaluar.config(foreground='#A0A0A0')
-        
-        self.output_area.delete("1.0", tk.END)
-        messagebox.showinfo("Limpiar", "Campos limpiados correctamente!")
-
-    def mostrar_ayuda(self):
-        mensaje = """
-            Para ingresar funciones, utiliza la siguiente sintaxis:
-            
-            - Suma: +
-            - Resta: -
-            - Multiplicacion: *
-            - Division: /
-            - Potencia: ** o ^
-            - Raiz cuadrada: sqrt(x)
-            
-            Ejemplos de funciones:
-            - Funcion lineal: 2*x + 3
-            - Funcion cuadratica: x**2 - 4*x
-            - Funcion racional: (x - 1) / (x + 2)
-            - Funcion con raiz: sqrt(x + 1)
-        """
-        messagebox.showinfo("Ayuda de Sintaxis", mensaje)
+    def _clear(self):
+        self.ed_func.clear()
+        self.ed_x.clear()
+        self.out.clear()
+        self.canvas.ax.clear()
+        self.canvas.draw()
