@@ -1,4 +1,5 @@
 import sympy as sp
+from sympy.calculus.util import function_range
 
 class AnalizadorFunciones:
     def __init__(self):
@@ -254,9 +255,29 @@ class AnalizadorFunciones:
             error_msg = f"Error al calcular intersecciones: {e}"
             return error_msg, [], error_msg, []
 
-    # recorrido de la funcion (placeholder)
     def calcular_recorrido(self, funcion_str):
         """
-        calcula el recorrido de la funcion
+        Calcula el recorrido de la función con pasos explicativos.
         """
-        return "no implementado aun", []
+        # validar primero
+        es_valida, mensaje = self.validar_funcion(funcion_str)
+        if not es_valida:
+            return f"Error: {mensaje}", []
+
+        try:
+            x = sp.Symbol('x')
+            f_x = sp.sympify(funcion_str)
+
+            pasos = []
+            pasos.append(f"1. Función: f(x) = {f_x}")
+            pasos.append("2. Usamos análisis simbólico para determinar el rango.")
+
+            # rango con sympy
+            recorrido = function_range(f_x, x, sp.S.Reals)
+
+            pasos.append(f"3. El recorrido calculado es: {recorrido}")
+
+            return str(recorrido), pasos
+
+        except Exception as e:
+            return f"Error al calcular recorrido: {e}", []
