@@ -1,16 +1,41 @@
 import sympy as sp
-from sympy.calculus.util import function_range
+from sympy import S
+from sympy.calculus.util import continuous_domain, function_range
+from sympy.solvers.solveset import solveset, solveset_real
+import re, unicodedata
 
 class AnalizadorFunciones:
-    def __init__(self):
-        pass
+    FUNCIONES_PERMITIDAS = {
+        # funciones
+        'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan,
+        'asin': sp.asin, 'acos': sp.acos, 'atan': sp.atan,
+        'sinh': sp.sinh, 'cosh': sp.cosh, 'tanh': sp.tanh,
+        'exp': sp.exp, 'log': sp.log, 'sqrt': sp.sqrt,
+        'Abs': sp.Abs, 'Piecewise': sp.Piecewise,
+        'floor': sp.floor, 'ceiling': sp.ceiling,
+        # constantes
+        'E': sp.E, 'pi': sp.pi,
+    }
 
-    # validacion de entrada
-    def validar_funcion(self, funcion_str):
-        """
-        valida que la funcion sea polinomica o racional
-        devuelve True/False y un mensaje explicativo
-        """
+    def __init__(self):
+        self._RE_NUM = re.compile(
+            r'^[+\-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?'
+            r'(?:/[+\-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?)?$'
+        )
+
+    def _sympify(self, s: str):
+        """Parse controlado: solo símbolo x y nombres permitidos."""
+        if not isinstance(s, str) or len(s) > 500:
+            raise ValueError("Expresión inválida o demasiado larga.")
+        x = sp.Symbol('x', real=True)
+        expr = sp.sympify(s, locals={**self.FUNCIONES_PERMITIDAS, 'x': x})
+        # bloquear símbolos extraños
+        if any(sym.name != 'x' for sym in expr.free_symbols):
+            raise ValueError("Solo se admite la variable x.")
+        return expr
+
+    def _pretty(self, expr) -> str:
+        from sympy.printing.pretty import pretty
         try:
             if not funcion_str or funcion_str.strip() == "":
                 return False, "La funcion no puede estar vacia"
@@ -37,17 +62,32 @@ class AnalizadorFunciones:
         except Exception as e:
             return False, f"Error al validar la funcion: {e}"
 
-    # evaluacion de la funcion
-    def evaluar_funcion(self, funcion_str, x_val):
-        """
-        evalua una funcion en un valor de x con pasos detallados
-        incluye validacion de funcion y dominio
-        """
-        # validar la funcion primero
-        es_valida, mensaje = self.validar_funcion(funcion_str)
-        if not es_valida:
-            return f"Error: {mensaje}", None
+    def _sanitize_number(self, s: str) -> str:
+        # Normaliza Unicode, cambia coma por punto, quita espacios y guiones Unicode
+        s = unicodedata.normalize('NFKC', s)
+        s = s.replace('\u2212','-').replace('\u2012','-').replace('\u2013','-').replace('\u2014','-').replace('\u2015','-')
+        s = re.sub(r'\s+', '', s)
+        s = s.replace(',', '.')
+        return s
 
+    def _to_exact(self, val_str: str):
+        if not val_str or val_str.strip() == "":
+            raise ValueError("Valor vacío.")
+        s = self._sanitize_number(val_str)
+        if not self._RE_NUM.fullmatch(s):
+            raise ValueError("Valor inválido para evaluar.")
+        # fracción
+        if '/' in s:
+            a, b = s.split('/', 1)
+            a = sp.nsimplify(a)
+            b = sp.nsimplify(b)
+            if b == 0:
+                raise ValueError("División por cero en el valor.")
+            return a / b
+        # número simple
+        return sp.nsimplify(s)
+
+    def _denominador(self, f):
         try:
             # validar que x_val sea un numero
             try:
@@ -64,17 +104,13 @@ class AnalizadorFunciones:
             
             resultado = f_x.subs(x, x_val)
 
-            # revisar si el resultado es valido
-            if resultado.is_complex or resultado.has(sp.I):
-                return "Error: el valor de x genera un numero complejo", None
-            if resultado.has(sp.oo) or resultado.has(-sp.oo) or resultado.has(sp.zoo):
-                return "Error: la funcion tiende a infinito en ese punto", None
-            
-            # simplificar el resultado
-            resultado = sp.simplify(resultado)
-            
-            pasos = self.obtener_pasos_evaluacion_detallada(f_x, x_val, resultado)
-            return float(resultado), pasos
+    def evaluar_funcion(self, funcion_str: str, x_val_str: str):
+        x = sp.Symbol('x', real=True)
+        pasos = []
+        try:
+            f = self._sympify(funcion_str)
+        except Exception:
+            return {"ok": False, "error": "Función inválida.", "steps": []}
 
         except sp.SympifyError:
             return "Error: funcion no valida", None
@@ -83,36 +119,16 @@ class AnalizadorFunciones:
         except Exception as e:
             return f"Error inesperado: {e}", None
 
-    def obtener_pasos_evaluacion_detallada(self, f_x, x_val, resultado):
-        """
-        genera pasos detallados de la evaluacion mostrando cada calculo
-        """
-        x = sp.Symbol('x')
-        pasos = []
-        
-        # paso 1: funcion original
-        pasos.append(f"1. Funcion original: f(x) = {f_x}")
-        
-        # paso 2: sustitucion
-        pasos.append(f"2. Sustituyendo x = {x_val}:")
-        
-        # paso 3: mostrar la sustitucion
-        f_sustituida = str(f_x).replace('x', f'({x_val})')
-        pasos.append(f"3. f({x_val}) = {f_sustituida}")
-        
-        # paso 4: calculos intermedios si es necesario
+        pasos.append(f"Función: f(x) = {self._pretty(f)}")
+        pasos.append(f"Sustitución: x = {self._pretty(xv)}")
+
+        # Validación de dominio puntual
         try:
-            # evaluar paso a paso para funciones mas complejas
-            expr_intermedia = f_x.subs(x, x_val)
-            
-            # si hay potencias o multiplicaciones, mostrar esos calculos
-            if '**' in str(f_x) or '*' in str(f_x):
-                # expandir la expresion para mostrar calculos
-                expanded = sp.expand(expr_intermedia)
-                if expanded != expr_intermedia and expanded != resultado:
-                    pasos.append(f"4. Calculando: {expanded}")
-                    
-        except:
+            den = self._denominador(f)
+            if sp.simplify(den.subs(x, xv)) == 0:
+                pasos.append("Denominador = 0 ⇒ punto fuera del dominio.")
+                return {"ok": False, "error": "División por cero en ese punto.", "steps": pasos}
+        except Exception:
             pass
         
         # resultado final
@@ -183,13 +199,11 @@ class AnalizadorFunciones:
             else:
                 pasos.append("3. La funcion es polinomica (no tiene denominador)")
 
-            # resultado del dominio
-            if not restricciones:
-                dominio_str = "todos los numeros reales"
-                pasos.append("6. Dominio: todos los numeros reales")
-            else:
-                dominio_str = f"todos los reales excepto x = {', '.join(map(str, restricciones))}"
-                pasos.append(f"6. Dominio: {dominio_str}")
+            # Chequeos
+            if exacto.has(sp.I) or (hasattr(exacto, "is_real") and exacto.is_real is False):
+                return {"ok": False, "error": "Resultado complejo.", "steps": pasos}
+            if exacto.has(sp.zoo) or exacto.has(sp.oo) or exacto.has(-sp.oo):
+                return {"ok": False, "error": "Resultado no finito.", "steps": pasos}
 
             return dominio_str, pasos
 
@@ -211,30 +225,35 @@ class AnalizadorFunciones:
             pasos_y.append(f"1. Funcion: f(x) = {f_x}")
             pasos_y.append("2. Para interseccion con eje Y, evaluamos f(0):")
 
-            if self.esta_en_dominio(f_x, 0):
-                y_val = f_x.subs(x, 0)
-                pasos_y.append(f"3. f(0) = {f_x.subs(x, 0)}")
-                
-                if not y_val.has(sp.I) and not y_val.has(sp.oo):
-                    y_val = sp.simplify(y_val)
-                    pasos_y.append(f"4. Interseccion con eje Y: (0, {y_val})")
-                    interseccion_y = f"(0, {y_val})"
-                else:
-                    pasos_y.append("4. El resultado no es un numero real")
-                    interseccion_y = "no existe"
-            else:
-                pasos_y.append("3. x = 0 no esta en el dominio")
-                pasos_y.append("4. No hay interseccion con eje Y")
-                interseccion_y = "no existe"
+        # Intersección con eje Y si 0 ∈ dominio
+        y_pair = None
+        try:
+            dom0 = continuous_domain(f, x, S.Reals)
+            if 0 in dom0:
+                y0 = f.subs(x, 0)
+                if y0.is_real is not False:
+                    y_pair = (0.0, float(sp.N(y0)))
+        except Exception:
+            pass
 
-            # pasos para intersecciones con eje x
-            pasos_x = []
-            pasos_x.append(f"1. Funcion: f(x) = {f_x}")
-            pasos_x.append("2. Para intersecciones con eje X, resolvemos f(x) = 0:")
-            pasos_x.append(f"3. {f_x} = 0")
+        # Raíces reales
+        x_list = []
+        try:
+            sol = solveset(sp.Eq(f, 0), x, domain=S.Reals)
+            for s in sol:
+                try:
+                    x_list.append(float(sp.N(s)))
+                except Exception:
+                    continue
+        except Exception:
+            try:
+                sol2 = solveset_real(sp.Eq(f, 0), x)
+                for s in sol2:
+                    x_list.append(float(sp.N(s)))
+            except Exception:
+                pass
 
-            soluciones = sp.solve(f_x, x)
-            pasos_x.append(f"4. Soluciones encontradas: {soluciones}")
+        return {"y": y_pair, "x": x_list}
 
             x_int_reales = []
             for sol in soluciones:
@@ -265,8 +284,19 @@ class AnalizadorFunciones:
             return f"Error: {mensaje}", []
 
         try:
-            x = sp.Symbol('x')
-            f_x = sp.sympify(funcion_str)
+            if isinstance(f, sp.Piecewise):
+                for _, cond in f.as_expr_set_pairs():
+                    if hasattr(cond, 'boundary'):
+                        b = cond.boundary
+                        for el in getattr(b, 'args', (b,)):
+                            try:
+                                for s in getattr(el, 'args', (el,)):
+                                    if getattr(s, "is_number", False):
+                                        critical.add(float(sp.N(s)))
+                            except Exception:
+                                continue
+        except Exception:
+            pass
 
             pasos = []
             pasos.append(f"1. Función: f(x) = {f_x}")

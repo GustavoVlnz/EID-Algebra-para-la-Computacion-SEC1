@@ -16,7 +16,7 @@ class MplCanvas(FigureCanvas):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Analizador de Funciones")
+        self.setWindowTitle("Analizador de funciones")
         self.resize(1100, 680)
         self.backend = AnalizadorFunciones()
         self._build_ui()
@@ -35,28 +35,28 @@ class MainWindow(QtWidgets.QMainWindow):
         left.addLayout(form)
 
         self.ed_func = QtWidgets.QLineEdit()
-        self.ed_func.setPlaceholderText("Ingresa f(x). Ej: (x-1)/(x+2)  |  x**2  |  (x+1)/(x-1)")
+        self.ed_func.setPlaceholderText("Ej.: (x-1)/(x+2)  |  sqrt(x+1)  |  Abs(x)")
         self.ed_func.setClearButtonEnabled(True)
         form.addRow("Función f(x):", self.ed_func)
 
         self.ed_x = QtWidgets.QLineEdit()
-        self.ed_x.setPlaceholderText("x a evaluar (opcional). Ej: 2  |  -0.5  |  3/5")
+        self.ed_x.setPlaceholderText("x opcional. Ej.: 2  |  -0.5  |  3/5")
         self.ed_x.setClearButtonEnabled(True)
-        # Validador simple: número o fracción a/b
-        rx = QtCore.QRegularExpression(r"^\s*[-+]?\d+(\.\d+)?\s*(/\s*[-+]?\d+(\.\d+)?)?\s*$")
+        # Validador: número o fracción a/b. Soporta .5, 1e-3 y espacios.
+        rx = QtCore.QRegularExpression(r"^\s*[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?(?:\s*/\s*[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?)?\s*$")
         self.ed_x.setValidator(QtGui.QRegularExpressionValidator(rx))
-        form.addRow("Valor x:", self.ed_x)
+        form.addRow("Valor de x:", self.ed_x)
 
         btn_row = QtWidgets.QHBoxLayout()
         left.addLayout(btn_row)
-        self.btn_run = QtWidgets.QPushButton("Analizar y Graficar")
+        self.btn_run = QtWidgets.QPushButton("Analizar y graficar")
         self.btn_clear = QtWidgets.QPushButton("Limpiar")
         btn_row.addWidget(self.btn_run)
         btn_row.addWidget(self.btn_clear)
 
         self.out = QtWidgets.QTextEdit()
         self.out.setReadOnly(True)
-        self.out.setPlaceholderText("Resultados estructurados y evaluación paso a paso aparecerán aquí.")
+        self.out.setPlaceholderText("Aquí verás dominio, recorrido, intersecciones y el paso a paso.")
         self.out.setFont(QtGui.QFont("Consolas", 10))
         left.addWidget(self.out, 1)
 
@@ -90,9 +90,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Preparar expresión
         x = sp.Symbol('x', real=True)
         try:
-            f = sp.sympify(f_str)
+            f = self.backend._sympify(f_str)
         except Exception:
-            raise ValueError("Función no válida.")
+            raise ValueError("Función inválida.")
 
         # Muestreo base + clusters en puntos críticos
         xs = self._linspace(x_min, x_max, base_pts)
@@ -131,6 +131,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 segx.append(xv); segy.append(yv)
         flush(label_needed=first)
 
+        # Pintar asintotas verticales donde el dominio excluye el punto crítico
+        for c in critical:
+            ax.axvline(c, linewidth=0.8, linestyle=':', alpha=0.7)
+
         # Intersecciones
         if inters:
             if inters.get("x"):
@@ -144,12 +148,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if punto:
             ax.plot([punto[0]], [punto[1]], marker='o', markersize=8, label=f"Punto ({punto[0]}, {punto[1]})")
 
-        ax.axhline(0, color='gray', linewidth=0.8, linestyle='--')
-        ax.axvline(0, color='gray', linewidth=0.8, linestyle='--')
+        ax.axhline(0, linewidth=0.8, linestyle='--')
+        ax.axvline(0, linewidth=0.8, linestyle='--')
         ax.grid(True, which='both', linewidth=0.3)
-        ax.set_title("Gráfico de la función")
-        ax.set_xlabel("Eje X")
-        ax.set_ylabel("Eje Y")
+        ax.set_title("Gráfico")
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
         ax.legend()
         self.canvas.draw()
 
@@ -197,15 +201,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         punto = None
         if vstr:
-            val, pasos_eval = self.backend.evaluar_funcion(fstr, vstr)
-            lines.append("")
-            lines.append("=== Evaluación en un punto ===")
-            if isinstance(val, (int, float)):
-                lines.extend(pasos_eval)
-                lines.append(f"Par ordenado: ({vstr}, {val})")
-                punto = (float(vstr), val)
+            res = self.backend.evaluar_funcion(fstr, vstr)
+            lines.append("\n--- Evaluación ---")
+            lines.extend(res.get("steps", []))
+            if res.get("ok"):
+                lines.append(f"Par ordenado: ({res['x_num']}, {res['value']})")
+                punto = (res['x_num'], res['value'])
             else:
-                lines.append(str(val))
+                lines.append(res.get("error", "Error en evaluación."))
 
         self.out.clear()
         self.out.setPlainText("\n".join(lines))
